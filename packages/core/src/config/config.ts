@@ -17,6 +17,7 @@ import {
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
+import { ResourceRegistry } from '../resources/resource-registry.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -47,8 +48,10 @@ import { tokenLimit } from '../core/tokenLimits.js';
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_FLASH_MODEL,
-  DEFAULT_GEMINI_MODEL,
+  DEFAULT_GEMINI_MODEL_AUTO,
   DEFAULT_THINKING_MODE,
+  isPreviewModel,
+  PREVIEW_GEMINI_MODEL,
 } from './models.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
@@ -80,11 +83,13 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
 import { HookSystem } from '../hooks/index.js';
 import type { UserTierId } from '../code_assist/types.js';
+import type { RetrieveUserQuotaResponse } from '../code_assist/types.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import type { Experiments } from '../code_assist/experiments/experiments.js';
 import { AgentRegistry } from '../agents/registry.js';
 import { setGlobalProxy } from '../utils/fetch.js';
-import { SubagentToolWrapper } from '../agents/subagent-tool-wrapper.js';
+import { DelegateToAgentTool } from '../agents/delegate-to-agent-tool.js';
+import { DELEGATE_TO_AGENT_TOOL_NAME } from '../tools/tool-names.js';
 import { getExperiments } from '../code_assist/experiments/experiments.js';
 import { ExperimentFlags } from '../code_assist/experiments/flagNames.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -332,6 +337,7 @@ export class Config {
   private allowedMcpServers: string[];
   private blockedMcpServers: string[];
   private promptRegistry!: PromptRegistry;
+  private resourceRegistry!: ResourceRegistry;
   private agentRegistry!: AgentRegistry;
   private sessionId: string;
   private fileSystemService: FileSystemService;
@@ -378,11 +384,13 @@ export class Config {
   private readonly bugCommand: BugCommandSettings | undefined;
   private model: string;
   private previewFeatures: boolean | undefined;
+  private hasAccessToPreviewModel: boolean = false;
   private readonly noBrowser: boolean;
   private readonly folderTrust: boolean;
   private ideMode: boolean;
 
   private inFallbackMode = false;
+  private _activeModel: string;
   private readonly maxSessionTurns: number;
   private readonly listSessions: boolean;
   private readonly deleteSession: string | undefined;
@@ -506,8 +514,8 @@ export class Config {
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
     this.bugCommand = params.bugCommand;
     this.model = params.model;
-    this.enableModelAvailabilityService =
-      params.enableModelAvailabilityService ?? false;
+    this._activeModel = params.model;
+    this.enableModelAvailabilityService = true;
     this.enableAgents = params.enableAgents ?? false;
     this.experimentalJitContext = params.experimentalJitContext ?? false;
     this.disableLLMCorrection = params.disableLLMCorrection ?? false;
@@ -550,7 +558,10 @@ export class Config {
       params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
     this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
     this.useSmartEdit = params.useSmartEdit ?? true;
-    this.useWriteTodos = params.useWriteTodos ?? true;
+    // // TODO(joshualitt): Re-evaluate the todo tool for 3 family.
+    this.useWriteTodos = isPreviewModel(this.model)
+      ? false
+      : (params.useWriteTodos ?? true);
     this.enableHooks = params.enableHooks ?? false;
     this.disabledHooks =
       (params.hooks && 'disabled' in params.hooks
@@ -572,7 +583,7 @@ export class Config {
       thinkingBudget:
         params.codebaseInvestigatorSettings?.thinkingBudget ??
         DEFAULT_THINKING_MODE,
-      model: params.codebaseInvestigatorSettings?.model ?? DEFAULT_GEMINI_MODEL,
+      model: params.codebaseInvestigatorSettings?.model,
     };
     this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
     this.enableShellOutputEfficiency =
@@ -602,6 +613,7 @@ export class Config {
     }
 
     if (this.telemetrySettings.enabled) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       initializeTelemetry(this);
     }
 
@@ -628,11 +640,19 @@ export class Config {
     // TODO(12593): Fix the settings loading logic to properly merge defaults and
     // remove this hack.
     let modelConfigServiceConfig = params.modelConfigServiceConfig;
-    if (modelConfigServiceConfig && !modelConfigServiceConfig.aliases) {
-      modelConfigServiceConfig = {
-        ...modelConfigServiceConfig,
-        aliases: DEFAULT_MODEL_CONFIGS.aliases,
-      };
+    if (modelConfigServiceConfig) {
+      if (!modelConfigServiceConfig.aliases) {
+        modelConfigServiceConfig = {
+          ...modelConfigServiceConfig,
+          aliases: DEFAULT_MODEL_CONFIGS.aliases,
+        };
+      }
+      if (!modelConfigServiceConfig.overrides) {
+        modelConfigServiceConfig = {
+          ...modelConfigServiceConfig,
+          overrides: DEFAULT_MODEL_CONFIGS.overrides,
+        };
+      }
     }
 
     this.modelConfigService = new ModelConfigService(
@@ -656,6 +676,7 @@ export class Config {
       await this.getGitService();
     }
     this.promptRegistry = new PromptRegistry();
+    this.resourceRegistry = new ResourceRegistry();
 
     this.agentRegistry = new AgentRegistry(this);
     await this.agentRegistry.initialize();
@@ -692,6 +713,9 @@ export class Config {
   }
 
   async refreshAuth(authMethod: AuthType) {
+    // Reset availability service when switching auth
+    this.modelAvailabilityService.reset();
+
     // Vertex and Genai have incompatible encryption and sending history with
     // thoughtSignature from Genai to Vertex will fail, we need to strip them
     if (
@@ -701,6 +725,9 @@ export class Config {
       // Restore the conversation history to the new client
       this.geminiClient.stripThoughtsFromHistory();
     }
+
+    // Reset availability status when switching auth (e.g. from limited key to OAuth)
+    this.modelAvailabilityService.reset();
 
     const newContentGeneratorConfig = await createContentGeneratorConfig(
       this,
@@ -721,6 +748,10 @@ export class Config {
 
     const codeAssistServer = getCodeAssistServer(this);
     if (codeAssistServer) {
+      if (codeAssistServer.projectId) {
+        await this.refreshUserQuota();
+      }
+
       this.experimentsPromise = getExperiments(codeAssistServer)
         .then((experiments) => {
           this.setExperiments(experiments);
@@ -742,8 +773,21 @@ export class Config {
       this.experimentsPromise = undefined;
     }
 
+    const authType = this.contentGeneratorConfig.authType;
+    if (
+      authType === AuthType.USE_GEMINI ||
+      authType === AuthType.USE_VERTEX_AI
+    ) {
+      this.setHasAccessToPreviewModel(true);
+    }
+
     // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
+
+    // Update model if user no longer has access to the preview model
+    if (!this.hasAccessToPreviewModel && isPreviewModel(this.model)) {
+      this.setModel(DEFAULT_GEMINI_MODEL_AUTO);
+    }
   }
 
   async getExperimentsAsync(): Promise<Experiments | undefined> {
@@ -812,9 +856,26 @@ export class Config {
   setModel(newModel: string): void {
     if (this.model !== newModel || this.inFallbackMode) {
       this.model = newModel;
+      // When the user explicitly sets a model, that becomes the active model.
+      this._activeModel = newModel;
       coreEvents.emitModelChanged(newModel);
     }
     this.setFallbackMode(false);
+    this.modelAvailabilityService.reset();
+  }
+
+  getActiveModel(): string {
+    return this._activeModel ?? this.model;
+  }
+
+  setActiveModel(model: string): void {
+    if (this._activeModel !== model) {
+      this._activeModel = model;
+    }
+  }
+
+  resetTurn(): void {
+    this.modelAvailabilityService.resetTurn();
   }
 
   isInFallbackMode(): boolean {
@@ -904,6 +965,10 @@ export class Config {
     return this.promptRegistry;
   }
 
+  getResourceRegistry(): ResourceRegistry {
+    return this.resourceRegistry;
+  }
+
   getDebugMode(): boolean {
     return this.debugMode;
   }
@@ -916,7 +981,41 @@ export class Config {
   }
 
   setPreviewFeatures(previewFeatures: boolean) {
+    // If it's using a preview model and it's turning off previewFeatures,
+    // switch the model to the default auto mode.
+    if (this.previewFeatures && !previewFeatures) {
+      if (isPreviewModel(this.getModel())) {
+        this.setModel(DEFAULT_GEMINI_MODEL_AUTO);
+      }
+    }
     this.previewFeatures = previewFeatures;
+  }
+
+  getHasAccessToPreviewModel(): boolean {
+    return this.hasAccessToPreviewModel;
+  }
+
+  setHasAccessToPreviewModel(hasAccess: boolean): void {
+    this.hasAccessToPreviewModel = hasAccess;
+  }
+
+  async refreshUserQuota(): Promise<RetrieveUserQuotaResponse | undefined> {
+    const codeAssistServer = getCodeAssistServer(this);
+    if (!codeAssistServer || !codeAssistServer.projectId) {
+      return undefined;
+    }
+    try {
+      const quota = await codeAssistServer.retrieveUserQuota({
+        project: codeAssistServer.projectId,
+      });
+      const hasAccess =
+        quota.buckets?.some((b) => b.modelId === PREVIEW_GEMINI_MODEL) ?? false;
+      this.setHasAccessToPreviewModel(hasAccess);
+      return quota;
+    } catch (e) {
+      debugLogger.debug('Failed to retrieve user quota', e);
+      return undefined;
+    }
   }
 
   getCoreTools(): string[] | undefined {
@@ -1544,26 +1643,24 @@ export class Config {
     }
 
     // Register Subagents as Tools
-    if (this.getCodebaseInvestigatorSettings().enabled) {
-      const definition = this.agentRegistry.getDefinition(
-        'codebase_investigator',
-      );
-      if (definition) {
-        // We must respect the main allowed/exclude lists for agents too.
-        const allowedTools = this.getAllowedTools();
+    // Register DelegateToAgentTool if agents are enabled
+    if (
+      this.isAgentsEnabled() ||
+      this.getCodebaseInvestigatorSettings().enabled
+    ) {
+      // Check if the delegate tool itself is allowed (if allowedTools is set)
+      const allowedTools = this.getAllowedTools();
+      const isAllowed =
+        !allowedTools || allowedTools.includes(DELEGATE_TO_AGENT_TOOL_NAME);
 
-        const isAllowed =
-          !allowedTools || allowedTools.includes(definition.name);
-
-        if (isAllowed) {
-          const messageBusEnabled = this.getEnableMessageBusIntegration();
-          const wrapper = new SubagentToolWrapper(
-            definition,
-            this,
-            messageBusEnabled ? this.getMessageBus() : undefined,
-          );
-          registry.registerTool(wrapper);
-        }
+      if (isAllowed) {
+        const messageBusEnabled = this.getEnableMessageBusIntegration();
+        const delegateTool = new DelegateToAgentTool(
+          this.agentRegistry,
+          this,
+          messageBusEnabled ? this.getMessageBus() : undefined,
+        );
+        registry.registerTool(delegateTool);
       }
     }
 

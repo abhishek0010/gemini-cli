@@ -198,7 +198,6 @@ describe('runNonInteractive', () => {
     );
     vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
       processedQuery: [{ text: query }],
-      shouldProceed: true,
     }));
   });
 
@@ -573,7 +572,6 @@ describe('runNonInteractive', () => {
     // 3. Setup the mock to return the processed parts
     mockHandleAtCommand.mockResolvedValue({
       processedQuery: processedParts,
-      shouldProceed: true,
     });
 
     // Mock a simple stream response from the Gemini client
@@ -637,7 +635,11 @@ describe('runNonInteractive', () => {
     );
     expect(processStdoutSpy).toHaveBeenCalledWith(
       JSON.stringify(
-        { response: 'Hello World', stats: MOCK_SESSION_METRICS },
+        {
+          session_id: 'test-session-id',
+          response: 'Hello World',
+          stats: MOCK_SESSION_METRICS,
+        },
         null,
         2,
       ),
@@ -720,7 +722,15 @@ describe('runNonInteractive', () => {
 
     // This should output JSON with empty response but include stats
     expect(processStdoutSpy).toHaveBeenCalledWith(
-      JSON.stringify({ response: '', stats: MOCK_SESSION_METRICS }, null, 2),
+      JSON.stringify(
+        {
+          session_id: 'test-session-id',
+          response: '',
+          stats: MOCK_SESSION_METRICS,
+        },
+        null,
+        2,
+      ),
     );
   });
 
@@ -755,7 +765,15 @@ describe('runNonInteractive', () => {
 
     // This should output JSON with empty response but include stats
     expect(processStdoutSpy).toHaveBeenCalledWith(
-      JSON.stringify({ response: '', stats: MOCK_SESSION_METRICS }, null, 2),
+      JSON.stringify(
+        {
+          session_id: 'test-session-id',
+          response: '',
+          stats: MOCK_SESSION_METRICS,
+        },
+        null,
+        2,
+      ),
     );
   });
 
@@ -792,6 +810,7 @@ describe('runNonInteractive', () => {
     expect(consoleErrorJsonSpy).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          session_id: 'test-session-id',
           error: {
             type: 'Error',
             message: 'Invalid input provided',
@@ -837,6 +856,7 @@ describe('runNonInteractive', () => {
     expect(consoleErrorJsonSpy).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          session_id: 'test-session-id',
           error: {
             type: 'FatalInputError',
             message: 'Invalid command syntax provided',

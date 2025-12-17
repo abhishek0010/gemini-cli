@@ -13,6 +13,8 @@ import type {
 } from '@google/genai';
 import type { Config } from '../config/config.js';
 import type { ContentGenerator } from './contentGenerator.js';
+import type { AuthType } from './contentGenerator.js';
+import { handleFallback } from '../fallback/handler.js';
 import { getResponseText } from '../utils/partUtils.js';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
@@ -20,6 +22,10 @@ import { logMalformedJsonResponse } from '../telemetry/loggers.js';
 import { MalformedJsonResponseEvent } from '../telemetry/types.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import type { ModelConfigKey } from '../services/modelConfigService.js';
+import {
+  applyModelSelection,
+  createAvailabilityContextProvider,
+} from '../availability/policyHelpers.js';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
 
@@ -82,6 +88,7 @@ export class BaseLlmClient {
   constructor(
     private readonly contentGenerator: ContentGenerator,
     private readonly config: Config,
+    private readonly authType?: AuthType,
   ) {}
 
   async generateJson(
@@ -232,13 +239,62 @@ export class BaseLlmClient {
   ): Promise<GenerateContentResponse> {
     const abortSignal = requestParams.config?.abortSignal;
 
+    // Define callback to fetch context dynamically since active model may get updated during retry loop
+    const getAvailabilityContext = createAvailabilityContextProvider(
+      this.config,
+      () => requestParams.model,
+    );
+
+    const {
+      model,
+      config: newConfig,
+      maxAttempts: availabilityMaxAttempts,
+    } = applyModelSelection(
+      this.config,
+      requestParams.model,
+      requestParams.config,
+    );
+    requestParams.model = model;
+    if (newConfig) {
+      requestParams.config = newConfig;
+    }
+    if (abortSignal) {
+      requestParams.config = { ...requestParams.config, abortSignal };
+    }
+
     try {
-      const apiCall = () =>
-        this.contentGenerator.generateContent(requestParams, promptId);
+      const apiCall = () => {
+        // If availability is enabled, ensure we use the current active model
+        // in case a fallback occurred in a previous attempt.
+        if (this.config.isModelAvailabilityServiceEnabled()) {
+          const activeModel = this.config.getActiveModel();
+          if (activeModel !== requestParams.model) {
+            requestParams.model = activeModel;
+            // Re-resolve config if model changed during retry
+            const { generateContentConfig } =
+              this.config.modelConfigService.getResolvedConfig({
+                model: activeModel,
+              });
+            requestParams.config = {
+              ...requestParams.config,
+              ...generateContentConfig,
+            };
+          }
+        }
+        return this.contentGenerator.generateContent(requestParams, promptId);
+      };
 
       return await retryWithBackoff(apiCall, {
         shouldRetryOnContent,
-        maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+        maxAttempts:
+          availabilityMaxAttempts ?? maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+        getAvailabilityContext,
+        onPersistent429: this.config.isInteractive()
+          ? (authType, error) =>
+              handleFallback(this.config, requestParams.model, authType, error)
+          : undefined,
+        authType:
+          this.authType ?? this.config.getContentGeneratorConfig()?.authType,
       });
     } catch (error) {
       if (abortSignal?.aborted) {
