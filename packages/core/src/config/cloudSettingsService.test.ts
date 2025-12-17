@@ -19,6 +19,7 @@ vi.mock('../code_assist/oauth2.js', () => ({
 vi.mock('../utils/debugLogger.js', () => ({
   debugLogger: {
     debug: vi.fn(),
+    log: vi.fn(),
   },
 }));
 

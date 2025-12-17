@@ -53,11 +53,11 @@ describe('codeAssist', () => {
         'session-123',
       );
 
-      expect(getOauthClient).toHaveBeenCalledWith(
-        AuthType.LOGIN_WITH_GOOGLE,
+      expect(setupUser).toHaveBeenCalledWith(
+        mockAuthClient,
         mockConfig,
+        AuthType.LOGIN_WITH_GOOGLE,
       );
-      expect(setupUser).toHaveBeenCalledWith(mockAuthClient);
       expect(MockedCodeAssistServer).toHaveBeenCalledWith(
         mockAuthClient,
         'test-project',
@@ -82,7 +82,11 @@ describe('codeAssist', () => {
         AuthType.COMPUTE_ADC,
         mockConfig,
       );
-      expect(setupUser).toHaveBeenCalledWith(mockAuthClient);
+      expect(setupUser).toHaveBeenCalledWith(
+        mockAuthClient,
+        mockConfig,
+        AuthType.COMPUTE_ADC,
+      );
       expect(MockedCodeAssistServer).toHaveBeenCalledWith(
         mockAuthClient,
         'test-project',

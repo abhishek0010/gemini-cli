@@ -593,7 +593,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       }
 
       const error = validateAuthMethod(
-        settings.merged.security!.auth!.selectedType!,
+        settings.merged.security.auth.selectedType,
       );
       if (error) {
         onAuthError(error);
