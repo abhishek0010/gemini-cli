@@ -11,6 +11,7 @@ import {
   useEffect,
   useRef,
   useLayoutEffect,
+  useReducer,
 } from 'react';
 import { type DOMElement, measureElement } from 'ink';
 import { App } from './App.js';
@@ -26,6 +27,7 @@ import {
   ToolCallStatus,
   type HistoryItemWithoutId,
   AuthState,
+  type ActiveHook,
 } from './types.js';
 import { MessageType, StreamingState } from './types.js';
 import {
@@ -62,6 +64,8 @@ import {
   fireSessionStartHook,
   fireSessionEndHook,
   generateSummary,
+  type HookStartPayload,
+  type HookEndPayload,
 } from '@google/gemini-cli-core';
 import { validateAuthMethod } from '../config/auth.js';
 import process from 'node:process';
@@ -140,6 +144,43 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+type ActiveHooksAction =
+  | { type: 'START'; payload: HookStartPayload }
+  | { type: 'END'; payload: HookEndPayload };
+
+function activeHooksReducer(
+  state: ActiveHook[],
+  action: ActiveHooksAction,
+): ActiveHook[] {
+  switch (action.type) {
+    case 'START':
+      return [
+        ...state,
+        {
+          name: action.payload.hookName,
+          eventName: action.payload.eventName,
+          index: action.payload.hookIndex,
+          total: action.payload.totalHooks,
+        },
+      ];
+    case 'END': {
+      const index = state.findIndex(
+        (h) =>
+          h.name === action.payload.hookName &&
+          h.eventName === action.payload.eventName,
+      );
+      if (index === -1) {
+        return state;
+      }
+      const newState = [...state];
+      newState.splice(index, 1);
+      return newState;
+    }
+    default:
+      return state;
+  }
+}
+
 interface AppContainerProps {
   config: Config;
   startupWarnings?: string[];
@@ -190,6 +231,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
     useState<boolean>(false);
   const [historyRemountKey, setHistoryRemountKey] = useState(0);
+  const [activeHooks, dispatchActiveHooks] = useReducer(activeHooksReducer, []);
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const [isTrustedFolder, setIsTrustedFolder] = useState<boolean | undefined>(
     isWorkspaceTrusted(settings.merged).isTrusted,
@@ -1345,6 +1387,24 @@ Logging in with Google... Restarting Gemini CLI to continue.
     };
   }, [historyManager]);
 
+  useEffect(() => {
+    const handleHookStart = (payload: HookStartPayload) => {
+      dispatchActiveHooks({ type: 'START', payload });
+    };
+
+    const handleHookEnd = (payload: HookEndPayload) => {
+      dispatchActiveHooks({ type: 'END', payload });
+    };
+
+    coreEvents.on(CoreEvent.HookStart, handleHookStart);
+    coreEvents.on(CoreEvent.HookEnd, handleHookEnd);
+
+    return () => {
+      coreEvents.off(CoreEvent.HookStart, handleHookStart);
+      coreEvents.off(CoreEvent.HookEnd, handleHookEnd);
+    };
+  }, []);
+
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
       return consoleMessages;
@@ -1492,6 +1552,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       elapsedTime,
       currentLoadingPhrase,
       historyRemountKey,
+      activeHooks,
       messageQueue,
       queueErrorMessage,
       showAutoAcceptIndicator,
@@ -1581,6 +1642,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       elapsedTime,
       currentLoadingPhrase,
       historyRemountKey,
+      activeHooks,
       messageQueue,
       queueErrorMessage,
       showAutoAcceptIndicator,

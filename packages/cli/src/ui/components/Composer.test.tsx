@@ -335,6 +335,16 @@ describe('Composer', () => {
       expect(lastFrame()).toContain('ContextSummaryDisplay');
     });
 
+    it('renders ContextSummaryDisplay with active hooks', () => {
+      const uiState = createMockUIState({
+        activeHooks: [{ name: 'test-hook', eventName: 'before-agent' }],
+      });
+
+      const { lastFrame } = renderComposer(uiState);
+
+      expect(lastFrame()).toContain('ContextSummaryDisplay');
+    });
+
     it('shows Ctrl+C exit prompt when ctrlCPressedOnce is true', () => {
       const uiState = createMockUIState({
         ctrlCPressedOnce: true,

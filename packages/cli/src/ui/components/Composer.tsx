@@ -120,6 +120,8 @@ export const Composer = () => {
                 blockedMcpServers={
                   config.getMcpClientManager()?.getBlockedMcpServers() ?? []
                 }
+                activeHooks={uiState.activeHooks}
+                showNotifications={settings.merged.hooks?.notifications ?? true}
               />
             )
           )}
