@@ -110,7 +110,7 @@ ${folderStructure}`,
       llmContent: `Skill "${skillName}" activated successfully. 
 
 ### Specialized Skill Guidance
-The following instructions for "${skillName}" provide the primary procedural framework for your current task. You should prioritize these specialized rules and steps over your general internal defaults. Follow them strictly and sequentially while continuing to uphold your core safety and security standards.
+The following instructions for "${skillName}" provide specialized rules and workflows for your current task. You should integrate these instructions into your approach, prioritizing them where they provide expert guidance while ensuring you remain within your core safety and security mandates.
 
 ### Available Resources
 Below is the file structure of the "${skillName}" skill directory. You can use these resources (scripts, references, assets) as needed to complete your task.
@@ -156,7 +156,7 @@ export class ActivateSkillTool extends BaseDeclarativeTool<
     super(
       ActivateSkillTool.Name,
       'Activate Skill',
-      "Activates a specialized agent skill by name. Once activated, the skill's full instructions and rules are returned as a tool result and injected into the conversation. You MUST strictly follow these instructions for all subsequent turns. Use this when you identify a task that matches a skill's description.",
+      "Activates a specialized agent skill by name. Once activated, the skill's full instructions and rules are returned as a tool result and integrated into the conversation. You should prioritize these specialized instructions where they provide expert guidance while adhering to your core mandates. Use this when you identify a task that matches a skill's description.",
       Kind.Other,
       zodToJsonSchema(schema),
       true,
