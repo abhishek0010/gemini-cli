@@ -45,9 +45,50 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
       .getSkills()
       .find((s) => s.name === skillName);
     if (skill) {
-      return `activating skill "${skillName}": ${skill.description}`;
+      return `Activate specialized agent skill "${skillName}": ${skill.description}`;
     }
-    return `activating skill "${skillName}"`;
+    return `Activate specialized agent skill "${skillName}"`;
+  }
+
+  protected override async getConfirmationDetails(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    if (!this.messageBus) {
+      return false;
+    }
+
+    const skillName = this.params.name;
+    const skill = this.config
+      .getSkillManager()
+      .getSkills()
+      .find((s) => s.name === skillName);
+
+    if (!skill) {
+      return false;
+    }
+
+    const folderStructure = await getFolderStructure(
+      path.dirname(skill.location),
+      {
+        ignoredFolders: new Set(['node_modules', '.git', '__pycache__']),
+      },
+    );
+
+    const confirmationDetails: ToolCallConfirmationDetails = {
+      type: 'info',
+      title: `Activate Skill: ${skillName}`,
+      prompt: `You are about to enable the specialized agent skill **${skillName}**.
+
+**Description:**
+${skill.description}
+
+**Resources to be shared with the model:**
+${folderStructure}`,
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        await this.publishPolicyUpdate(outcome);
+      },
+    };
+    return confirmationDetails;
   }
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {
@@ -93,7 +134,7 @@ ${folderStructure}
 
 # Skill: ${content.name}
 ${content.body}`,
-      returnDisplay: `Skill "${skillName}" activated.`,
+      returnDisplay: `Skill **${skillName}** activated. Resources loaded from \`${path.dirname(skill.location)}\`:\n\n${folderStructure}`,
     };
   }
 }
@@ -129,7 +170,7 @@ export class ActivateSkillTool extends BaseDeclarativeTool<
 
     super(
       ActivateSkillTool.Name,
-      'ActivateSkill',
+      'Activate Skill',
       "Activates a specialized agent skill by name. Once activated, the skill's full instructions and rules are returned as a tool result and injected into the conversation. You MUST strictly follow these instructions for all subsequent turns. Use this when you identify a task that matches a skill's description.",
       Kind.Other,
       zodToJsonSchema(schema),

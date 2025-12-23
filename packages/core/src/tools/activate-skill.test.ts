@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ActivateSkillTool } from './activate-skill.js';
 import type { Config } from '../config/config.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 vi.mock('../utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock folder structure'),
@@ -15,6 +16,11 @@ vi.mock('../utils/getFolderStructure.js', () => ({
 describe('ActivateSkillTool', () => {
   let mockConfig: Config;
   let tool: ActivateSkillTool;
+  const mockMessageBus = {
+    publish: vi.fn(),
+    subscribe: vi.fn(),
+    unsubscribe: vi.fn(),
+  } as unknown as MessageBus;
 
   beforeEach(() => {
     mockConfig = {
@@ -35,15 +41,33 @@ describe('ActivateSkillTool', () => {
         activateSkill: vi.fn(),
       }),
     } as unknown as Config;
-    tool = new ActivateSkillTool(mockConfig);
+    tool = new ActivateSkillTool(mockConfig, mockMessageBus);
   });
 
   it('should return enhanced description', () => {
     const params = { name: 'test-skill' };
     const invocation = tool.build(params);
     expect(invocation.getDescription()).toBe(
-      'activating skill "test-skill": A test skill',
+      'Activate specialized agent skill "test-skill": A test skill',
     );
+  });
+
+  it('should return enhanced confirmation details', async () => {
+    const params = { name: 'test-skill' };
+    const invocation = tool.build(params);
+    const details = await (
+      invocation as unknown as {
+        getConfirmationDetails: (signal: AbortSignal) => Promise<{
+          prompt: string;
+          title: string;
+        }>;
+      }
+    ).getConfirmationDetails(new AbortController().signal);
+
+    expect(details.title).toBe('Activate Skill: test-skill');
+    expect(details.prompt).toContain('enable the specialized agent skill');
+    expect(details.prompt).toContain('A test skill');
+    expect(details.prompt).toContain('Mock folder structure');
   });
 
   it('should activate a valid skill and return its content', async () => {
@@ -61,7 +85,8 @@ describe('ActivateSkillTool', () => {
     expect(result.llmContent).toContain('Available Resources');
     expect(result.llmContent).toContain('Mock folder structure');
     expect(result.llmContent).toContain('Skill instructions content.');
-    expect(result.returnDisplay).toBe('Skill "test-skill" activated.');
+    expect(result.returnDisplay).toContain('Skill **test-skill** activated');
+    expect(result.returnDisplay).toContain('Mock folder structure');
   });
 
   it('should throw error if skill is not in enum', async () => {
