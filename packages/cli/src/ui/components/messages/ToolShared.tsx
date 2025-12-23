@@ -118,16 +118,9 @@ export const ToolInfo: React.FC<ToolInfoProps> = ({
     }
   }, [emphasis, isSkill]);
 
-  const showSkillLabel = isSkill && !name.startsWith('Skill: ');
-
   return (
     <Box overflow="hidden" height={1} flexGrow={1} flexShrink={1}>
       <Text strikethrough={status === ToolCallStatus.Canceled} wrap="truncate">
-        {showSkillLabel && (
-          <Text color={theme.text.accent} bold>
-            Skill Activated:
-          </Text>
-        )}
         <Text color={nameColor} bold>
           {name}
         </Text>{' '}
