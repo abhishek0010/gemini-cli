@@ -40,7 +40,8 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {
     const skillName = this.params.name;
-    const skills = this.config.getSkills();
+    const skillDiscoveryService = this.config.getSkillDiscoveryService();
+    const skills = skillDiscoveryService.getSkills();
     const skill = skills.find((s) => s.name === skillName);
 
     if (!skill) {
@@ -50,10 +51,21 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
       };
     }
 
+    const content = await skillDiscoveryService.getSkillContent(skillName);
+    if (!content) {
+      return {
+        llmContent: `Error: Could not read content for skill "${skillName}".`,
+        returnDisplay: `Error reading skill "${skillName}".`,
+      };
+    }
+
     this.config.activateSkill(skillName);
 
     return {
-      llmContent: `Skill "${skillName}" activated successfully. Its detailed instructions are now part of your system prompt for the rest of this session. You do not need to read its SKILL.md file anymore.`,
+      llmContent: `Skill "${skillName}" activated successfully. Here are its detailed instructions and rules. You MUST follow them strictly:
+
+# Skill: ${content.name}
+${content.body}`,
       returnDisplay: `Skill "${skillName}" activated.`,
     };
   }

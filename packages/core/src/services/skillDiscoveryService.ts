@@ -20,12 +20,14 @@ export interface SkillContent extends SkillMetadata {
 }
 
 export class SkillDiscoveryService {
+  private skills: SkillMetadata[] = [];
+
   /**
-   * Discovers skills in the provided paths.
+   * Discovers skills in the provided paths and stores them.
    * A skill is a directory containing a SKILL.md file at its root.
    */
   async discoverSkills(paths: string[]): Promise<SkillMetadata[]> {
-    const skills: SkillMetadata[] = [];
+    const discoveredSkills: SkillMetadata[] = [];
     const seenLocations = new Set<string>();
 
     for (const searchPath of paths) {
@@ -53,7 +55,7 @@ export class SkillDiscoveryService {
 
           const metadata = await this.parseSkillFile(skillFile);
           if (metadata) {
-            skills.push(metadata);
+            discoveredSkills.push(metadata);
             seenLocations.add(skillFile);
           }
         }
@@ -63,13 +65,26 @@ export class SkillDiscoveryService {
       }
     }
 
-    return skills;
+    this.skills = discoveredSkills;
+    return discoveredSkills;
   }
 
   /**
-   * Reads the full content (metadata + body) of a skill file.
+   * Returns the list of discovered skills.
    */
-  async getSkillContent(filePath: string): Promise<SkillContent | null> {
+  getSkills(): SkillMetadata[] {
+    return this.skills;
+  }
+
+  /**
+   * Reads the full content (metadata + body) of a skill by name.
+   */
+  async getSkillContent(name: string): Promise<SkillContent | null> {
+    const skill = this.skills.find((s) => s.name === name);
+    if (!skill) {
+      return null;
+    }
+    const filePath = skill.location;
     try {
       const content = await fs.readFile(filePath, 'utf-8');
 

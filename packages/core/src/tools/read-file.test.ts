@@ -44,7 +44,9 @@ describe('ReadFileTool', () => {
       storage: {
         getProjectTempDir: () => path.join(tempRootDir, '.temp'),
       },
-      getSkills: () => [],
+      getSkillDiscoveryService: () => ({
+        getSkills: () => [],
+      }),
       isInteractive: () => false,
     } as unknown as Config;
     tool = new ReadFileTool(mockConfigInstance);
@@ -116,13 +118,15 @@ describe('ReadFileTool', () => {
         storage: {
           getProjectTempDir: () => path.join(tempRootDir, '.temp'),
         },
-        getSkills: () => [
-          {
-            name: 'outside-skill',
-            description: 'A skill outside',
-            location: skillFile,
-          },
-        ],
+        getSkillDiscoveryService: () => ({
+          getSkills: () => [
+            {
+              name: 'outside-skill',
+              description: 'A skill outside',
+              location: skillFile,
+            },
+          ],
+        }),
         isInteractive: () => false,
       } as unknown as Config;
       const skillTool = new ReadFileTool(mockConfigWithSkill);
@@ -476,7 +480,9 @@ describe('ReadFileTool', () => {
           storage: {
             getProjectTempDir: () => path.join(tempRootDir, '.temp'),
           },
-          getSkills: () => [],
+          getSkillDiscoveryService: () => ({
+            getSkills: () => [],
+          }),
         } as unknown as Config;
         tool = new ReadFileTool(mockConfigInstance);
       });

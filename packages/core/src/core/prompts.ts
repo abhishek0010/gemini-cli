@@ -131,46 +131,26 @@ export async function getCoreSystemPrompt(
 
   const interactiveMode = config.isInteractiveShellEnabled();
 
-  const skills = config.getSkills();
+  const skills = config.getSkillDiscoveryService().getSkills();
   let skillsPrompt = '';
   if (skills.length > 0) {
+    const skillsJson = JSON.stringify(
+      skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        location: skill.location,
+      })),
+      null,
+      2,
+    );
     skillsPrompt = `
 # Available Agent Skills
 
 You have access to the following specialized skills. To activate a skill and follow its detailed instructions, you MUST first call the \`${ACTIVATE_SKILL_TOOL_NAME}\` tool with the skill's name.
 
-<available_skills>
-${skills
-  .map(
-    (skill) => `  <skill>
-    <name>${skill.name}</name>
-    <description>${skill.description}</description>
-  </skill>`,
-  )
-  .join('\n')}
-</available_skills>
-`;
-  }
-
-  const activeSkillNames = config.getActiveSkillNames();
-  let activeSkillsPrompt = '';
-  if (activeSkillNames.length > 0) {
-    const activeSkillContents = await Promise.all(
-      activeSkillNames.map((name) => config.getSkillContent(name)),
-    );
-
-    activeSkillsPrompt = `
-# Active Skill Instructions
-
-The following skills are currently active. You MUST follow these instructions strictly:
-
-${activeSkillContents
-  .filter((c) => c !== null)
-  .map(
-    (content) => `## Skill: ${content.name}
-${content.body}`,
-  )
-  .join('\n\n')}
+\`\`\`json
+${skillsJson}
+\`\`\`
 `;
   }
 
@@ -198,7 +178,7 @@ ${content.body}`,
           : ''
       }
 
-${config.getAgentRegistry().getDirectoryContext()}${skillsPrompt}${activeSkillsPrompt}`,
+${config.getAgentRegistry().getDirectoryContext()}${skillsPrompt}`,
       primaryWorkflows_prefix: `
 # Primary Workflows
 

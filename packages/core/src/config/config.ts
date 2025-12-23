@@ -38,11 +38,7 @@ import { BaseLlmClient } from '../core/baseLlmClient.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
-import {
-  SkillDiscoveryService,
-  type SkillMetadata,
-  type SkillContent,
-} from '../services/skillDiscoveryService.js';
+import { SkillDiscoveryService } from '../services/skillDiscoveryService.js';
 import type { TelemetryTarget } from '../telemetry/index.js';
 import {
   initializeTelemetry,
@@ -396,7 +392,6 @@ export class Config {
   };
   private fileDiscoveryService: FileDiscoveryService | null = null;
   private skillDiscoveryService: SkillDiscoveryService | null = null;
-  private skills: SkillMetadata[] = [];
   private activeSkillNames: Set<string> = new Set();
   private gitService: GitService | undefined = undefined;
   private readonly checkpointing: boolean;
@@ -713,7 +708,7 @@ export class Config {
       path.join(this.cwd, '.gemini', 'skills'),
       path.join(os.homedir(), '.gemini', 'skills'),
     ];
-    this.skills = await this.skillDiscoveryService.discoverSkills(skillPaths);
+    await this.skillDiscoveryService.discoverSkills(skillPaths);
 
     this.agentRegistry = new AgentRegistry(this);
     await this.agentRegistry.initialize();
@@ -1309,16 +1304,11 @@ export class Config {
     return this.cwd;
   }
 
-  getSkills(): SkillMetadata[] {
-    return this.skills;
-  }
-
-  async getSkillContent(name: string): Promise<SkillContent | null> {
-    const skill = this.skills.find((s) => s.name === name);
-    if (!skill || !this.skillDiscoveryService) {
-      return null;
+  getSkillDiscoveryService(): SkillDiscoveryService {
+    if (!this.skillDiscoveryService) {
+      this.skillDiscoveryService = new SkillDiscoveryService();
     }
-    return this.skillDiscoveryService.getSkillContent(skill.location);
+    return this.skillDiscoveryService;
   }
 
   getActiveSkillNames(): string[] {

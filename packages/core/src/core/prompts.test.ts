@@ -72,9 +72,10 @@ describe('Core System Prompt (prompts.ts)', () => {
       getAgentRegistry: vi.fn().mockReturnValue({
         getDirectoryContext: vi.fn().mockReturnValue('Mock Agent Directory'),
       }),
-      getSkills: vi.fn().mockReturnValue([]),
+      getSkillDiscoveryService: vi.fn().mockReturnValue({
+        getSkills: vi.fn().mockReturnValue([]),
+      }),
       getActiveSkillNames: vi.fn().mockReturnValue([]),
-      getSkillContent: vi.fn().mockResolvedValue(null),
     } as unknown as Config;
   });
 
@@ -86,43 +87,20 @@ describe('Core System Prompt (prompts.ts)', () => {
         location: '/path/to/test-skill/SKILL.md',
       },
     ];
-    vi.mocked(mockConfig.getSkills).mockReturnValue(skills);
+    vi.mocked(mockConfig.getSkillDiscoveryService().getSkills).mockReturnValue(
+      skills,
+    );
     const prompt = await getCoreSystemPrompt(mockConfig);
 
     expect(prompt).toContain('# Available Agent Skills');
     expect(prompt).toContain(
       "To activate a skill and follow its detailed instructions, you MUST first call the `activate_skill` tool with the skill's name.",
     );
-    expect(prompt).toContain('<available_skills>');
-    expect(prompt).toContain('<name>test-skill</name>');
-    expect(prompt).toContain(
-      '<description>A test skill description</description>',
-    );
-    expect(prompt).toContain('</available_skills>');
-  });
-
-  it('should include active skill instructions when skills are activated', async () => {
-    const skills = [
-      {
-        name: 'active-skill',
-        description: 'An active skill',
-        location: '/path/to/active-skill/SKILL.md',
-      },
-    ];
-    vi.mocked(mockConfig.getSkills).mockReturnValue(skills);
-    vi.mocked(mockConfig.getActiveSkillNames).mockReturnValue(['active-skill']);
-    vi.mocked(mockConfig.getSkillContent).mockResolvedValue({
-      name: 'active-skill',
-      description: 'An active skill',
-      location: '/path/to/active-skill/SKILL.md',
-      body: 'THESE ARE THE SKILL INSTRUCTIONS.',
-    });
-
-    const prompt = await getCoreSystemPrompt(mockConfig);
-
-    expect(prompt).toContain('# Active Skill Instructions');
-    expect(prompt).toContain('## Skill: active-skill');
-    expect(prompt).toContain('THESE ARE THE SKILL INSTRUCTIONS.');
+    expect(prompt).toContain('```json');
+    expect(prompt).toContain('"name": "test-skill"');
+    expect(prompt).toContain('"description": "A test skill description"');
+    expect(prompt).toContain('"location": "/path/to/test-skill/SKILL.md"');
+    expect(prompt).toContain('```');
   });
 
   it('should use chatty system prompt for preview model', async () => {
@@ -222,9 +200,10 @@ describe('Core System Prompt (prompts.ts)', () => {
         getAgentRegistry: vi.fn().mockReturnValue({
           getDirectoryContext: vi.fn().mockReturnValue('Mock Agent Directory'),
         }),
-        getSkills: vi.fn().mockReturnValue([]),
+        getSkillDiscoveryService: vi.fn().mockReturnValue({
+          getSkills: vi.fn().mockReturnValue([]),
+        }),
         getActiveSkillNames: vi.fn().mockReturnValue([]),
-        getSkillContent: vi.fn().mockResolvedValue(null),
       } as unknown as Config;
 
       const prompt = await getCoreSystemPrompt(testConfig);

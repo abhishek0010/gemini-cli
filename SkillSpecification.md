@@ -107,18 +107,18 @@ to:
 - Read the instructions for a specific skill.
 - Access or execute bundled resources.
 
-### 5.3 Context Injection Example (XML)
+### 5.3 Context Injection Example (JSON)
 
 It is recommended to provide metadata to the model in a structured format:
 
-```xml
-<available_skills>
-  <skill>
-    <name>pdf-processing</name>
-    <description>Extracts text and tables from PDF files.</description>
-    <location>/absolute/path/to/pdf-processing/SKILL.md</location>
-  </skill>
-</available_skills>
+```json
+[
+  {
+    "name": "pdf-processing",
+    "description": "Extracts text and tables from PDF files.",
+    "location": "/absolute/path/to/pdf-processing/SKILL.md"
+  }
+]
 ```
 
 ## 6. Security & Safety
