@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { LoadingIndicator } from './LoadingIndicator.js';
 import { ContextSummaryDisplay } from './ContextSummaryDisplay.js';
+import { HookStatusDisplay } from './HookStatusDisplay.js';
 import { AutoAcceptIndicator } from './AutoAcceptIndicator.js';
 import { ShellModeIndicator } from './ShellModeIndicator.js';
 import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
@@ -109,6 +110,9 @@ export const Composer = () => {
             <Text color={theme.text.secondary}>Press Esc again to clear.</Text>
           ) : uiState.queueErrorMessage ? (
             <Text color={theme.status.error}>{uiState.queueErrorMessage}</Text>
+          ) : uiState.activeHooks.length > 0 &&
+            (settings.merged.hooks?.notifications ?? true) ? (
+            <HookStatusDisplay activeHooks={uiState.activeHooks} />
           ) : (
             !settings.merged.ui?.hideContextSummary &&
             !hideContextSummary && (
@@ -120,8 +124,6 @@ export const Composer = () => {
                 blockedMcpServers={
                   config.getMcpClientManager()?.getBlockedMcpServers() ?? []
                 }
-                activeHooks={uiState.activeHooks}
-                showNotifications={settings.merged.hooks?.notifications ?? true}
               />
             )
           )}

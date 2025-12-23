@@ -143,6 +143,7 @@ vi.mock('./contexts/SessionContext.js');
 vi.mock('./components/shared/text-buffer.js');
 vi.mock('./hooks/useLogger.js');
 vi.mock('./hooks/useInputHistoryStore.js');
+vi.mock('./hooks/useHookDisplayState.js');
 
 // Mock external utilities
 vi.mock('../utils/events.js');
@@ -171,6 +172,7 @@ import { useTextBuffer } from './components/shared/text-buffer.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
+import { useHookDisplayState } from './hooks/useHookDisplayState.js';
 import { useKeypress, type Key } from './hooks/useKeypress.js';
 import { measureElement } from 'ink';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
@@ -243,6 +245,7 @@ describe('AppContainer State Management', () => {
   const mockedUseLoadingIndicator = useLoadingIndicator as Mock;
   const mockedUseKeypress = useKeypress as Mock;
   const mockedUseInputHistoryStore = useInputHistoryStore as Mock;
+  const mockedUseHookDisplayState = useHookDisplayState as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -363,6 +366,7 @@ describe('AppContainer State Management', () => {
       elapsedTime: '0.0s',
       currentLoadingPhrase: '',
     });
+    mockedUseHookDisplayState.mockReturnValue([]);
 
     // Mock Config
     mockConfig = makeFakeConfig();
@@ -1875,7 +1879,10 @@ describe('AppContainer State Management', () => {
       unmount!();
     });
 
-    it('updates activeHooks when HookStart and HookEnd events are received', async () => {
+    it('provides activeHooks from useHookDisplayState', async () => {
+      const mockHooks = [{ name: 'hook1', eventName: 'event1' }];
+      mockedUseHookDisplayState.mockReturnValue(mockHooks);
+
       let unmount: () => void;
       await act(async () => {
         const result = renderAppContainer();
@@ -1883,120 +1890,7 @@ describe('AppContainer State Management', () => {
       });
       await waitFor(() => expect(capturedUIState).toBeTruthy());
 
-      // Get handlers
-      const startHandler = mockCoreEvents.on.mock.calls.find(
-        (call: unknown[]) => call[0] === CoreEvent.HookStart,
-      )?.[1];
-      const endHandler = mockCoreEvents.on.mock.calls.find(
-        (call: unknown[]) => call[0] === CoreEvent.HookEnd,
-      )?.[1];
-
-      expect(startHandler).toBeDefined();
-      expect(endHandler).toBeDefined();
-
-      // Simulate HookStart
-      act(() => {
-        startHandler({ hookName: 'hook1', eventName: 'event1' });
-      });
-      expect(capturedUIState.activeHooks).toEqual([
-        {
-          name: 'hook1',
-          eventName: 'event1',
-          index: undefined,
-          total: undefined,
-        },
-      ]);
-
-      // Simulate another HookStart
-      act(() => {
-        startHandler({ hookName: 'hook2', eventName: 'event1' });
-      });
-      expect(capturedUIState.activeHooks).toEqual([
-        {
-          name: 'hook1',
-          eventName: 'event1',
-          index: undefined,
-          total: undefined,
-        },
-        {
-          name: 'hook2',
-          eventName: 'event1',
-          index: undefined,
-          total: undefined,
-        },
-      ]);
-
-      // Simulate HookEnd for hook1
-      act(() => {
-        endHandler({ hookName: 'hook1', eventName: 'event1', success: true });
-      });
-      expect(capturedUIState.activeHooks).toEqual([
-        {
-          name: 'hook2',
-          eventName: 'event1',
-          index: undefined,
-          total: undefined,
-        },
-      ]);
-
-      // Simulate HookEnd for hook2
-      act(() => {
-        endHandler({ hookName: 'hook2', eventName: 'event1', success: true });
-      });
-      expect(capturedUIState.activeHooks).toEqual([]);
-
-      unmount!();
-    });
-
-    it('handles multiple identical hooks correctly by removing only one instance at a time', async () => {
-      let unmount: () => void;
-      await act(async () => {
-        const result = renderAppContainer();
-        unmount = result.unmount;
-      });
-      await waitFor(() => expect(capturedUIState).toBeTruthy());
-
-      const startHandler = mockCoreEvents.on.mock.calls.find(
-        (call: unknown[]) => call[0] === CoreEvent.HookStart,
-      )?.[1];
-      const endHandler = mockCoreEvents.on.mock.calls.find(
-        (call: unknown[]) => call[0] === CoreEvent.HookEnd,
-      )?.[1];
-
-      // Start two identical hooks
-      act(() => {
-        startHandler({ hookName: 'identical-hook', eventName: 'event1' });
-      });
-      act(() => {
-        startHandler({ hookName: 'identical-hook', eventName: 'event1' });
-      });
-      expect(capturedUIState.activeHooks).toHaveLength(2);
-      expect(capturedUIState.activeHooks[0].name).toBe('identical-hook');
-      expect(capturedUIState.activeHooks[1].name).toBe('identical-hook');
-
-      // Finish one instance
-      act(() => {
-        endHandler({
-          hookName: 'identical-hook',
-          eventName: 'event1',
-          success: true,
-        });
-      });
-
-      // Verify only ONE was removed
-      expect(capturedUIState.activeHooks).toHaveLength(1);
-      expect(capturedUIState.activeHooks[0].name).toBe('identical-hook');
-
-      // Finish the second instance
-      act(() => {
-        endHandler({
-          hookName: 'identical-hook',
-          eventName: 'event1',
-          success: true,
-        });
-      });
-      expect(capturedUIState.activeHooks).toHaveLength(0);
-
+      expect(capturedUIState.activeHooks).toEqual(mockHooks);
       unmount!();
     });
   });

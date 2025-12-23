@@ -10,7 +10,6 @@ import { theme } from '../semantic-colors.js';
 import { type IdeContext, type MCPServerConfig } from '@google/gemini-cli-core';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { isNarrowWidth } from '../utils/isNarrowWidth.js';
-import { type ActiveHook } from '../types.js';
 
 interface ContextSummaryDisplayProps {
   geminiMdFileCount: number;
@@ -18,8 +17,6 @@ interface ContextSummaryDisplayProps {
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   ideContext?: IdeContext;
-  activeHooks?: ActiveHook[];
-  showNotifications?: boolean;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
@@ -28,8 +25,6 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   mcpServers,
   blockedMcpServers,
   ideContext,
-  activeHooks = [],
-  showNotifications = true,
 }) => {
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
@@ -41,8 +36,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     geminiMdFileCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
-    openFileCount === 0 &&
-    (activeHooks.length === 0 || !showNotifications)
+    openFileCount === 0
   ) {
     return <Text> </Text>; // Render an empty space to reserve height
   }
@@ -89,42 +83,6 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     return parts.join(', ');
   })();
 
-  const hooksText = (() => {
-    if (activeHooks.length === 0 || !showNotifications) {
-      return '';
-    }
-
-    const label = activeHooks.length > 1 ? 'Executing Hooks' : 'Executing Hook';
-    let currentChars = label.length + 4; // emoji (2) + label + ": " (2)
-    const displayedHooks = [];
-    let hiddenCount = 0;
-
-    // Determine how many hooks we can display based on terminal width
-    const maxChars = Math.floor(terminalWidth * 0.4);
-
-    for (let i = 0; i < activeHooks.length; i++) {
-      const hook = activeHooks[i];
-      let hookDisplayName = hook.name;
-      if (hook.index && hook.total && hook.total > 1) {
-        hookDisplayName += ` (${hook.index}/${hook.total})`;
-      }
-
-      if (currentChars + hookDisplayName.length + 2 > maxChars && i > 0) {
-        hiddenCount = activeHooks.length - i;
-        break;
-      }
-
-      displayedHooks.push(hookDisplayName);
-      currentChars += hookDisplayName.length + 2;
-    }
-
-    let result = `🪝 ${label}: ${displayedHooks.join(', ')}`;
-    if (hiddenCount > 0) {
-      result += `... (+${hiddenCount} more)`;
-    }
-    return result;
-  })();
-
   const summaryParts = [openFilesText, geminiMdText, mcpText].filter(Boolean);
 
   const renderPart = (
@@ -155,11 +113,6 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
             {'  '}- {part}
           </Text>
         ))}
-        {hooksText && (
-          <Text color={theme.status.warning} wrap="truncate">
-            {'  '}- {hooksText}
-          </Text>
-        )}
       </Box>
     );
   }
@@ -172,19 +125,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
         </Text>
       </Box>
       {summaryParts.map((part, index) =>
-        renderPart(part, index === summaryParts.length - 1 && !hooksText),
-      )}
-      {hooksText && (
-        <Box marginLeft={summaryParts.length > 0 ? 0 : 0} flexShrink={0}>
-          {summaryParts.length > 0 && (
-            <Text color={theme.text.secondary} wrap="truncate">
-              {' | '}
-            </Text>
-          )}
-          <Text color={theme.status.warning} wrap="truncate">
-            {hooksText}
-          </Text>
-        </Box>
+        renderPart(part, index === summaryParts.length - 1),
       )}
     </Box>
   );
