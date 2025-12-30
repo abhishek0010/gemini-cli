@@ -683,7 +683,7 @@ defaults to 60 seconds, but you should set stricter limits for fast hooks.
           {
             "name": "fast-validator",
             "command": "./hooks/validate.sh",
-            "timeout": 5000 // 5 seconds
+            "timeout": 5000
           }
         ]
       }
