@@ -57,8 +57,6 @@ import {
   writeToStderr,
   disableMouseEvents,
   enableMouseEvents,
-  enterAlternateScreen,
-  disableLineWrapping,
   shouldEnterAlternateScreen,
   startupProfiler,
   ExitCodes,
@@ -540,33 +538,6 @@ export async function main() {
       await deleteSession(config, sessionToDelete);
       await runExitCleanup();
       process.exit(ExitCodes.SUCCESS);
-    }
-
-    const wasRaw = process.stdin.isRaw;
-    if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
-      // Set this as early as possible to avoid spurious characters from
-      // input showing up in the output.
-      process.stdin.setRawMode(true);
-
-      if (
-        shouldEnterAlternateScreen(
-          isAlternateBufferEnabled(settings),
-          config.getScreenReader(),
-        )
-      ) {
-        enterAlternateScreen();
-        disableLineWrapping();
-
-        // Ink will cleanup so there is no need for us to manually cleanup.
-      }
-
-      // This cleanup isn't strictly needed but may help in certain situations.
-      process.on('SIGTERM', () => {
-        process.stdin.setRawMode(wasRaw);
-      });
-      process.on('SIGINT', () => {
-        process.stdin.setRawMode(wasRaw);
-      });
     }
 
     await setupTerminalAndTheme(config, settings);

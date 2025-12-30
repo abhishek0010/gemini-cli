@@ -312,10 +312,11 @@ async function initOauthClient(
       message: 'Waiting for authentication...\n',
     });
 
-    // Add timeout to prevent infinite waiting when browser tab gets stuck
+    // Add timeout and cancellation to prevent infinite waiting
     const authTimeout = 5 * 60 * 1000; // 5 minutes timeout
+    let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         reject(
           new FatalAuthenticationError(
             'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
@@ -325,7 +326,37 @@ async function initOauthClient(
       }, authTimeout);
     });
 
-    await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+    let sigIntHandler: (() => void) | undefined;
+    let stdinHandler: ((data: Buffer) => void) | undefined;
+    const cancellationPromise = new Promise<never>((_, reject) => {
+      sigIntHandler = () => {
+        reject(new FatalCancellationError('Authentication cancelled by user.'));
+      };
+      process.on('SIGINT', sigIntHandler);
+
+      // If stdin is in raw mode, we need to manually catch Ctrl+C (\u0003)
+      // and emit SIGINT so our handler above can catch it.
+      if (process.stdin.isTTY && process.stdin.isRaw) {
+        stdinHandler = (data: Buffer) => {
+          if (data.length === 1 && data[0] === 0x03) {
+            process.emit('SIGINT');
+          }
+        };
+        process.stdin.on('data', stdinHandler);
+      }
+    });
+
+    try {
+      await Promise.race([
+        webLogin.loginCompletePromise,
+        timeoutPromise,
+        cancellationPromise,
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (sigIntHandler) process.removeListener('SIGINT', sigIntHandler);
+      if (stdinHandler) process.stdin.removeListener('data', stdinHandler);
+    }
 
     coreEvents.emit(CoreEvent.UserFeedback, {
       severity: 'info',
