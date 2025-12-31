@@ -15,7 +15,7 @@ import {
   startupProfiler,
 } from '@google/gemini-cli-core';
 import { type LoadedSettings } from '../config/settings.js';
-import { performInitialAuth } from './auth.js';
+import { INTERACTION_REQUIRED, performInitialAuth } from './auth.js';
 import { validateTheme } from './theme.js';
 
 export interface InitializationResult {
@@ -30,22 +30,32 @@ export interface InitializationResult {
  * This runs BEFORE the React UI is rendered.
  * @param config The application config.
  * @param settings The loaded application settings.
+ * @param silentAuthOnly If true, only cached credentials will be attempted.
  * @returns The results of the initialization.
  */
 export async function initializeApp(
   config: Config,
   settings: LoadedSettings,
+  silentAuthOnly = false,
 ): Promise<InitializationResult> {
   const authHandle = startupProfiler.start('authenticate');
-  const authError = await performInitialAuth(
+  let authError = await performInitialAuth(
     config,
     settings.merged.security?.auth?.selectedType,
+    silentAuthOnly,
   );
   authHandle?.end();
-  const themeError = validateTheme(settings);
 
-  const shouldOpenAuthDialog =
-    settings.merged.security?.auth?.selectedType === undefined || !!authError;
+  let shouldOpenAuthDialog =
+    settings.merged.security?.auth?.selectedType === undefined ||
+    authError !== null;
+
+  if (authError === INTERACTION_REQUIRED) {
+    authError = null;
+    shouldOpenAuthDialog = false; // Let the TUI handle it reactively
+  }
+
+  const themeError = validateTheme(settings);
 
   logCliConfiguration(
     config,

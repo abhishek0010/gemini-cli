@@ -544,7 +544,11 @@ export async function main() {
 
     setMaxSizedBoxDebugging(isDebugMode);
     const initAppHandle = startupProfiler.start('initialize_app');
-    const initializationResult = await initializeApp(config, settings);
+    const initializationResult = await initializeApp(
+      config,
+      settings,
+      config.isInteractive(),
+    );
     initAppHandle?.end();
 
     if (

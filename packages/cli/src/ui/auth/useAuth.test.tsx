@@ -125,6 +125,7 @@ describe('useAuth', () => {
   describe('useAuthCommand', () => {
     const mockConfig = {
       refreshAuth: vi.fn(),
+      isBrowserLaunchSuppressed: vi.fn().mockReturnValue(false),
     } as unknown as Config;
 
     const createSettings = (selectedType?: AuthType) =>

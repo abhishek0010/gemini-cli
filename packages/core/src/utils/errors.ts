@@ -77,6 +77,13 @@ export class CanceledError extends Error {
   }
 }
 
+export class InteractionRequiredError extends Error {
+  constructor(message = 'Interaction required for authentication') {
+    super(message);
+    this.name = 'InteractionRequiredError';
+  }
+}
+
 export class ForbiddenError extends Error {}
 export class UnauthorizedError extends Error {}
 export class BadRequestError extends Error {}

@@ -23,6 +23,7 @@ export function AuthInProgress({
   useKeypress(
     (key) => {
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
+        process.emit('SIGINT');
         onTimeout();
       }
     },
@@ -32,6 +33,7 @@ export function AuthInProgress({
   useEffect(() => {
     const timer = setTimeout(() => {
       setTimedOut(true);
+      process.emit('SIGINT');
       onTimeout();
     }, 180000);
 

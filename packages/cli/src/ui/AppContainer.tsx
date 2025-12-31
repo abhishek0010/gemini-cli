@@ -50,7 +50,6 @@ import {
   CoreEvent,
   refreshServerHierarchicalMemory,
   type MemoryChangedPayload,
-  writeToStdout,
   disableMouseEvents,
   enterAlternateScreen,
   enableMouseEvents,
@@ -102,7 +101,6 @@ import { appEvents, AppEvent } from '../utils/events.js';
 import { type UpdateObject } from './utils/updateCheck.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
-import { RELAUNCH_EXIT_CODE } from '../utils/processUtils.js';
 import type { SessionInfo } from '../utils/sessionUtils.js';
 import { useMessageQueue } from './hooks/useMessageQueue.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
@@ -438,7 +436,7 @@ export const AppContainer = (props: AppContainerProps) => {
     onAuthError,
     apiKeyDefaultValue,
     reloadApiKey,
-  } = useAuthCommand(settings, config);
+  } = useAuthCommand(settings, config, initializationResult);
 
   const { proQuotaRequest, handleProQuotaChoice } = useQuotaAndFallback({
     config,
@@ -484,33 +482,10 @@ export const AppContainer = (props: AppContainerProps) => {
       if (authType) {
         await clearCachedCredentialFile();
         settings.setValue(scope, 'security.auth.selectedType', authType);
-
-        try {
-          await config.refreshAuth(authType);
-          setAuthState(AuthState.Authenticated);
-        } catch (e) {
-          onAuthError(
-            `Failed to authenticate: ${e instanceof Error ? e.message : String(e)}`,
-          );
-          return;
-        }
-
-        if (
-          authType === AuthType.LOGIN_WITH_GOOGLE &&
-          config.isBrowserLaunchSuppressed()
-        ) {
-          await runExitCleanup();
-          writeToStdout(`
-----------------------------------------------------------------
-Logging in with Google... Restarting Gemini CLI to continue.
-----------------------------------------------------------------
-          `);
-          process.exit(RELAUNCH_EXIT_CODE);
-        }
+        setAuthState(AuthState.Unauthenticated);
       }
-      setAuthState(AuthState.Authenticated);
     },
-    [settings, config, setAuthState, onAuthError],
+    [settings, setAuthState],
   );
 
   const handleApiKeySubmit = useCallback(

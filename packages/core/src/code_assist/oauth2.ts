@@ -221,6 +221,11 @@ async function initOauthClient(
     }
   }
 
+  if ((config as any).silentAuthOnly) {
+    const { InteractionRequiredError } = await import('../utils/errors.js');
+    throw new InteractionRequiredError();
+  }
+
   if (config.isBrowserLaunchSuppressed()) {
     let success = false;
     const maxRetries = 2;

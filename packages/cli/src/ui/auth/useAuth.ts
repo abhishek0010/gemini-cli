@@ -15,6 +15,7 @@ import {
 import { getErrorMessage } from '@google/gemini-cli-core';
 import { AuthState } from '../types.js';
 import { validateAuthMethod } from '../../config/auth.js';
+import { type InitializationResult } from '../../core/initializer.js';
 
 export function validateAuthMethodWithSettings(
   authType: AuthType,
@@ -34,12 +35,20 @@ export function validateAuthMethodWithSettings(
   return validateAuthMethod(authType);
 }
 
-export const useAuthCommand = (settings: LoadedSettings, config: Config) => {
+export const useAuthCommand = (
+  settings: LoadedSettings,
+  config: Config,
+  initializationResult?: InitializationResult,
+) => {
   const [authState, setAuthState] = useState<AuthState>(
-    AuthState.Unauthenticated,
+    initializationResult?.shouldOpenAuthDialog
+      ? AuthState.Updating
+      : AuthState.Unauthenticated,
   );
 
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(
+    initializationResult?.authError ?? null,
+  );
   const [apiKeyDefaultValue, setApiKeyDefaultValue] = useState<
     string | undefined
   >(undefined);
@@ -119,13 +128,40 @@ export const useAuthCommand = (settings: LoadedSettings, config: Config) => {
       }
 
       try {
+        if (
+          authType === AuthType.LOGIN_WITH_GOOGLE &&
+          config.isBrowserLaunchSuppressed()
+        ) {
+          const { runExitCleanup } = await import('../../utils/cleanup.js');
+          const { RELAUNCH_EXIT_CODE } = await import(
+            '../../utils/processUtils.js'
+          );
+          const { writeToStdout } = await import('@google/gemini-cli-core');
+
+          await runExitCleanup();
+          writeToStdout(`
+----------------------------------------------------------------
+Logging in with Google... Restarting Gemini CLI to continue.
+----------------------------------------------------------------
+          `);
+          process.exit(RELAUNCH_EXIT_CODE);
+        }
+
         await config.refreshAuth(authType);
 
         debugLogger.log(`Authenticated via "${authType}".`);
         setAuthError(null);
         setAuthState(AuthState.Authenticated);
       } catch (e) {
-        onAuthError(`Failed to login. Message: ${getErrorMessage(e)}`);
+        const { FatalCancellationError } = await import(
+          '@google/gemini-cli-core'
+        );
+        if (e instanceof FatalCancellationError) {
+          setAuthError(null);
+          setAuthState(AuthState.Updating);
+        } else {
+          onAuthError(`Failed to login. Message: ${getErrorMessage(e)}`);
+        }
       }
     })();
   }, [
