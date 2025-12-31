@@ -879,6 +879,41 @@ CRITICAL: When you have fully completed the user's task, you MUST call the compl
             nextTurnState = null; // On error, always refetch state
           }
 
+          // Automatic Recovery for Stale Snapshots
+          // If the tool failed because of a stale snapshot, we can auto-recover by taking a fresh one right here.
+          // This saves a turn and prevents the model from getting confused.
+          if (
+            typeof functionResponse === 'string' &&
+            functionResponse.includes('stale snapshot')
+          ) {
+            debugLogger.log(
+              `⚠️  Tool ${fnName} reported stale snapshot. Auto-recovering...`,
+            );
+            if (printOutput) printOutput('🔄 Refreshing stale snapshot...');
+
+            try {
+              const freshSnap = await this.browserTools.takeSnapshot(false);
+              const freshContent = freshSnap.output || '';
+              if (freshContent) {
+                // Append the fresh snapshot to the error message so the model has the new state immediately
+                functionResponse += `\n\nHERE IS A FRESH SNAPSHOT:\n${freshContent}`;
+                // Also update nextTurnState so we don't fetch it again at the start of the next loop (efficient)
+                // We need to parse just the snapshot part if possible, but takeSnapshot returns the whole text.
+                // The processToolResponse helper does a good job of separating them, but here we just have text.
+                // Let's rely on the loop's "Capture State" logic if nextTurnState is null, OR
+                // we can try to extract it.
+                // For simplicity/robustness: Let's set nextTurnState.
+                const snapMatch = freshContent.match(/uid=[\s\S]*/);
+                if (snapMatch) {
+                  nextTurnState = snapMatch[0];
+                }
+                // If we couldn't parse it nicely, nextTurnState remains null and we'll refetch (small perf hit, but safe)
+              }
+            } catch (snapErr) {
+              debugLogger.log(`Failed to auto-recover snapshot: ${snapErr}`);
+            }
+          }
+
           currentInputParts.push({
             functionResponse: {
               name: fnName,
