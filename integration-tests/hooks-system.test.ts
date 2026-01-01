@@ -891,10 +891,24 @@ try {
 
   describe('Session Lifecycle Hooks', () => {
     it('should fire SessionStart hook on app startup', async () => {
-      // Create inline hook command that outputs JSON
-      const sessionStartCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'Session starting on startup'}))\"";
+      // 1. Initial setup to initialize test directory
+      await rig.setup('should fire SessionStart hook on app startup');
 
+      // Create hook script
+      const hookScript = `
+        console.log(JSON.stringify({
+          decision: 'allow',
+          systemMessage: 'Session starting on startup'
+        }));
+      `;
+      // Use a unique filename for this test to avoid conflicts
+      const scriptPath = join(rig.testDir!, 'session_start_startup.js');
+      writeFileSync(scriptPath, hookScript);
+
+      // Ensure path is properly escaped for command line usage on all platforms
+      const sessionStartCommand = `node "${scriptPath.replace(/\\/g, '/')}"`;
+
+      // 2. Setup with configuration
       await rig.setup('should fire SessionStart hook on app startup', {
         fakeResponsesPath: join(
           import.meta.dirname,
@@ -951,12 +965,35 @@ try {
     });
 
     it('should fire SessionEnd and SessionStart hooks on /clear command', async () => {
-      // Create inline hook commands for both SessionEnd and SessionStart
-      const sessionEndCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'Session ending due to clear'}))\"";
-      const sessionStartCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'Session starting after clear'}))\"";
+      // 1. Initial setup
+      await rig.setup(
+        'should fire SessionEnd and SessionStart hooks on /clear command',
+      );
 
+      // Create hook scripts
+      const sessionEndScript = `
+        console.log(JSON.stringify({
+          decision: 'allow',
+          systemMessage: 'Session ending due to clear'
+        }));
+      `;
+      const sessionStartScript = `
+        console.log(JSON.stringify({
+          decision: 'allow',
+          systemMessage: 'Session starting after clear'
+        }));
+      `;
+
+      const endScriptPath = join(rig.testDir!, 'session_end_clear.js');
+      const startScriptPath = join(rig.testDir!, 'session_start_clear.js');
+
+      writeFileSync(endScriptPath, sessionEndScript);
+      writeFileSync(startScriptPath, sessionStartScript);
+
+      const sessionEndCommand = `node "${endScriptPath.replace(/\\/g, '/')}"`;
+      const sessionStartCommand = `node "${startScriptPath.replace(/\\/g, '/')}"`;
+
+      // 2. Full setup
       await rig.setup(
         'should fire SessionEnd and SessionStart hooks on /clear command',
         {
@@ -1129,10 +1166,22 @@ try {
 
   describe('Compression Hooks', () => {
     it('should fire PreCompress hook on automatic compression', async () => {
-      // Create inline hook command that outputs JSON
-      const preCompressCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'PreCompress hook executed for automatic compression'}))\"";
+      // 1. Initial setup
+      await rig.setup('should fire PreCompress hook on automatic compression');
 
+      // Create hook script
+      const preCompressScript = `
+        console.log(JSON.stringify({
+          decision: 'allow',
+          systemMessage: 'PreCompress hook executed for automatic compression'
+        }));
+      `;
+      const scriptPath = join(rig.testDir!, 'pre_compress.js');
+      writeFileSync(scriptPath, preCompressScript);
+
+      const preCompressCommand = `node "${scriptPath.replace(/\\/g, '/')}"`;
+
+      // 2. Full setup
       await rig.setup('should fire PreCompress hook on automatic compression', {
         fakeResponsesPath: join(
           import.meta.dirname,
@@ -1197,9 +1246,22 @@ try {
 
   describe('SessionEnd on Exit', () => {
     it('should fire SessionEnd hook on graceful exit in non-interactive mode', async () => {
-      const sessionEndCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'SessionEnd hook executed on exit'}))\"";
+      // 1. Initial setup
+      await rig.setup('should fire SessionEnd hook on graceful exit');
 
+      // Create hook script
+      const sessionEndScript = `
+        console.log(JSON.stringify({
+          decision: 'allow',
+          systemMessage: 'SessionEnd hook executed on exit'
+        }));
+      `;
+      const scriptPath = join(rig.testDir!, 'session_end_exit.js');
+      writeFileSync(scriptPath, sessionEndScript);
+
+      const sessionEndCommand = `node "${scriptPath.replace(/\\/g, '/')}"`;
+
+      // 2. Full setup
       await rig.setup('should fire SessionEnd hook on graceful exit', {
         fakeResponsesPath: join(
           import.meta.dirname,
